@@ -5,7 +5,7 @@ import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from geometry import distance, length, segment_distance
+from geometry import distance, length, polyline_distance, segment_distance
 
 
 class TestHandler(BaseHTTPRequestHandler):
@@ -25,7 +25,7 @@ class TestHandler(BaseHTTPRequestHandler):
         self.respond(200, page, "text/html; charset=utf-8")
 
     def do_POST(self):
-        if self.path not in ("/api/length", "/api/segment-distance"):
+        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance"):
             self.respond(404, b'{"error":"Not found"}')
             return
         try:
@@ -35,13 +35,16 @@ class TestHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(size).decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("좌표를 포함한 JSON 객체를 보내주세요.")
-            if self.path == "/api/length":
+            if self.path in ("/api/length", "/api/polyline-distance"):
                 points = payload.get("points")
             else:
                 points = [payload.get("point"), payload.get("start"), payload.get("end")]
             if not isinstance(points, list) or len(points) > 1000:
                 raise ValueError("좌표 목록은 최대 1,000개의 점을 담은 배열이어야 합니다.")
-            for point in points:
+            validation_points = points
+            if self.path == "/api/polyline-distance":
+                validation_points = [payload.get("point")] + points
+            for point in validation_points:
                 if not isinstance(point, list) or len(point) != 2:
                     raise ValueError("각 점은 [x, y] 형태여야 합니다.")
                 for value in point:
@@ -54,7 +57,10 @@ class TestHandler(BaseHTTPRequestHandler):
                 segments = [distance(points[i - 1], points[i]) for i in range(1, len(points))]
                 result = {"length": total, "segments": segments, "point_count": len(points)}
             else:
-                gap = segment_distance(points[0], points[1], points[2])
+                if self.path == "/api/segment-distance":
+                    gap = segment_distance(points[0], points[1], points[2])
+                else:
+                    gap = polyline_distance(payload["point"], points)
                 if not math.isfinite(gap):
                     raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
                 result = {"distance": gap}

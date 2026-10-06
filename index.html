@@ -62,6 +62,22 @@
       <span>점과 선분 사이 거리</span>
       <output id="segment-total"></output>
     </section>
+    <h2>점과 선 전체 사이 거리 · polyline_distance</h2>
+    <p>이웃한 점들이 만드는 모든 선분까지의 거리를 계산하고, 가장 작은 값을 반환합니다.</p>
+    <form id="polyline-form">
+      <label for="polyline-point">선 전체와 비교할 점 · point</label>
+      <input id="polyline-point" type="text" value="[4, 4]" spellcheck="false" required>
+      <label for="polyline-points">비교할 선의 좌표 목록 · points</label>
+      <textarea id="polyline-points" spellcheck="false" aria-describedby="polyline-hint">[[0, 0], [6, 0], [6, 6]]</textarea>
+      <p class="hint" id="polyline-hint">기본 예제의 구간별 거리는 4와 2이므로 결과는 2입니다. 마지막 점과 첫 점을 자동으로 연결하지 않습니다.</p>
+      <button id="polyline-calculate" type="submit">점과 선 전체 거리 계산</button>
+      <p id="polyline-error" role="alert" hidden></p>
+    </form>
+    <section class="result" id="polyline-result" aria-live="polite" hidden>
+      <span>점과 선 전체 사이 최단거리</span>
+      <output id="polyline-total"></output>
+      <p class="hint">대각선 계산에서는 소수점 오차로 0 대신 아주 작은 값이 나올 수 있습니다.</p>
+    </section>
     <p class="hint">결과 단위는 입력 좌표와 같습니다. 픽셀이면 픽셀입니다.<br>지도·도로 경로 계산은 아직 없으며, 위도·경도의 미터 거리 계산용이 아닙니다.</p>
   </main>
   <script>
@@ -128,6 +144,40 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || '계산하지 못했습니다.');
         document.getElementById('segment-total').textContent = String(data.distance);
+        result.hidden = false;
+      } catch (failure) {
+        error.textContent = failure.message;
+        error.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+    document.getElementById('polyline-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('polyline-calculate');
+      const error = document.getElementById('polyline-error');
+      const result = document.getElementById('polyline-result');
+      error.hidden = true;
+      result.hidden = true;
+      button.disabled = true;
+      try {
+        let coordinates;
+        try {
+          coordinates = {
+            point: JSON.parse(document.getElementById('polyline-point').value),
+            points: JSON.parse(document.getElementById('polyline-points').value),
+          };
+        } catch {
+          throw new Error('점을 [x, y], 선을 [[x, y], …] 형태의 JSON 배열로 입력해주세요.');
+        }
+        const response = await fetch('/api/polyline-distance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(coordinates),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '계산하지 못했습니다.');
+        document.getElementById('polyline-total').textContent = String(data.distance);
         result.hidden = false;
       } catch (failure) {
         error.textContent = failure.message;

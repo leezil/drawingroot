@@ -96,5 +96,48 @@ class LocalServerTests(unittest.TestCase):
         self.assertIn("error", json.loads(body))
 
 
+    def test_returns_point_to_polyline_distance(self):
+        payload = {"point": [4, 4], "points": [[0, 0], [6, 0], [6, 6]]}
+        status, body = self.request("POST", "/api/polyline-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"distance": 2.0})
+
+    def test_polyline_with_one_point_returns_distance(self):
+        payload = {"point": [3, 4], "points": [[0, 0]]}
+        status, body = self.request("POST", "/api/polyline-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["distance"], 5.0)
+
+    def test_empty_polyline_returns_error_not_zero(self):
+        payload = {"point": [3, 4], "points": []}
+        status, body = self.request("POST", "/api/polyline-distance", json.dumps(payload))
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_rejects_invalid_polyline_inputs(self):
+        cases = (
+            {"points": [[0, 0], [6, 0]]},
+            {"point": [4, 4]},
+            {"point": [True, 4], "points": [[0, 0]]},
+            {"point": [4, 4], "points": "not a list"},
+            {"point": [4, 4], "points": [[0, 0], [6]]},
+            {"point": [4, 4], "points": [[float("inf"), 0]]},
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                status, body = self.request("POST", "/api/polyline-distance", json.dumps(payload))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+
+    def test_polyline_point_count_limit_excludes_query_point(self):
+        payload = {"point": [3, 4], "points": [[0, 0]] * 1000}
+        status, body = self.request("POST", "/api/polyline-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["distance"], 5.0)
+        payload["points"].append([0, 0])
+        status, _ = self.request("POST", "/api/polyline-distance", json.dumps(payload))
+        self.assertEqual(status, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

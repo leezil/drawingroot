@@ -41,3 +41,17 @@ def segment_distance(point, start, end):
         closest = (start[0] + direction_x * along,
                    start[1] + direction_y * along)
     return distance(point, closest)
+
+
+def polyline_distance(point, points):
+    """점에서 입력 순서대로 이은 선 전체까지의 최단거리. 자동으로 닫지 않는다."""
+    if len(points) == 0:
+        raise ValueError("비교할 선의 좌표가 하나 이상 필요합니다.")
+    if len(points) == 1:
+        return distance(point, points[0])
+
+    closest_distance = math.inf
+    for index in range(1, len(points)):
+        gap = segment_distance(point, points[index - 1], points[index])
+        closest_distance = min(closest_distance, gap)
+    return closest_distance

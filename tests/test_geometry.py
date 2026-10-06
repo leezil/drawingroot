@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from geometry import distance, length, segment_distance
+from geometry import distance, length, polyline_distance, segment_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -89,6 +89,49 @@ class SegmentDistanceTests(unittest.TestCase):
     def test_unrepresentable_segment_length_is_rejected(self):
         with self.assertRaises(ValueError):
             segment_distance((0, 0), (-1e308, 0), (1e308, 0))
+
+
+class PolylineDistanceTests(unittest.TestCase):
+    def test_uses_nearest_segment_not_first_segment(self):
+        self.assertEqual(polyline_distance((4, 4), [(0, 0), (6, 0), (6, 6)]), 2.0)
+
+    def test_nearest_location_can_be_inside_segment(self):
+        self.assertEqual(polyline_distance((3, 4), [(0, 0), (6, 0)]), 4.0)
+
+    def test_point_on_line_has_zero_distance(self):
+        self.assertEqual(polyline_distance((6, 3), [(0, 0), (6, 0), (6, 6)]), 0.0)
+
+    def test_one_point_uses_point_distance(self):
+        self.assertEqual(polyline_distance((3, 4), [(0, 0)]), 5.0)
+
+    def test_empty_line_is_rejected(self):
+        with self.assertRaises(ValueError):
+            polyline_distance((3, 4), [])
+
+    def test_repeated_points_are_supported(self):
+        self.assertEqual(polyline_distance((3, 4), [(0, 0), (0, 0), (6, 0)]), 4.0)
+
+    def test_line_with_only_repeated_points(self):
+        self.assertEqual(polyline_distance((3, 4), [(0, 0), (0, 0)]), 5.0)
+
+    def test_line_does_not_automatically_close(self):
+        self.assertEqual(polyline_distance((3, 3), [(0, 0), (6, 0), (6, 6)]), 3.0)
+
+    def test_explicit_closing_segment_is_included(self):
+        gap = polyline_distance((3, 3), [(0, 0), (6, 0), (6, 6), (0, 0)])
+        self.assertAlmostEqual(gap, 0.0)
+
+    def test_reversing_line_preserves_distance(self):
+        self.assertEqual(polyline_distance((4, 4), [(6, 6), (6, 0), (0, 0)]), 2.0)
+
+    def test_point_beyond_endpoint(self):
+        self.assertEqual(polyline_distance((9, 10), [(0, 0), (6, 0), (6, 6)]), 5.0)
+
+    def test_input_is_not_modified(self):
+        points = [(0, 0), (6, 0), (6, 6)]
+        original = points.copy()
+        polyline_distance((4, 4), points)
+        self.assertEqual(points, original)
 
 
 if __name__ == "__main__":
