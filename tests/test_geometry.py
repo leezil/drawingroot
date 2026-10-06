@@ -1,6 +1,7 @@
+import math
 import unittest
 
-from geometry import distance, length
+from geometry import distance, length, segment_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -48,6 +49,46 @@ class LengthTests(unittest.TestCase):
         original = points.copy()
         length(points)
         self.assertEqual(points, original)
+
+
+class SegmentDistanceTests(unittest.TestCase):
+    def test_horizontal_segment_interior_projection(self):
+        self.assertEqual(segment_distance((3, 4), (0, 0), (6, 0)), 4.0)
+
+    def test_vertical_segment(self):
+        self.assertEqual(segment_distance((-4, 3), (0, 0), (0, 6)), 4.0)
+
+    def test_diagonal_segment(self):
+        self.assertAlmostEqual(segment_distance((3, 0), (0, 0), (4, 4)), math.sqrt(4.5))
+
+    def test_point_on_segment_has_zero_distance(self):
+        self.assertEqual(segment_distance((3, 0), (0, 0), (6, 0)), 0.0)
+
+    def test_projection_before_start_uses_start(self):
+        self.assertEqual(segment_distance((-3, 4), (0, 0), (6, 0)), 5.0)
+
+    def test_projection_after_end_uses_end(self):
+        self.assertEqual(segment_distance((9, 4), (0, 0), (6, 0)), 5.0)
+
+    def test_point_on_extended_line_still_has_distance_to_segment(self):
+        self.assertEqual(segment_distance((9, 0), (0, 0), (6, 0)), 3.0)
+
+    def test_identical_endpoints_use_point_distance(self):
+        self.assertEqual(segment_distance((3, 4), (0, 0), (0, 0)), 5.0)
+
+    def test_reversing_endpoints_preserves_distance(self):
+        self.assertEqual(segment_distance((9, 4), (6, 0), (0, 0)), 5.0)
+
+    def test_translation_preserves_distance(self):
+        self.assertEqual(segment_distance((13, 24), (10, 20), (16, 20)), 4.0)
+
+    def test_tiny_nonzero_segment_is_not_treated_as_zero(self):
+        gap = segment_distance((5e-201, 4e-201), (0, 0), (1e-200, 0))
+        self.assertAlmostEqual(gap / 1e-201, 4.0)
+
+    def test_unrepresentable_segment_length_is_rejected(self):
+        with self.assertRaises(ValueError):
+            segment_distance((0, 0), (-1e308, 0), (1e308, 0))
 
 
 if __name__ == "__main__":

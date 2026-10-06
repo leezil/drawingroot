@@ -1,11 +1,11 @@
-"""길이 함수를 직접 확인하는 로컬 전용 HTTP 서버: python server.py."""
+"""기하 함수를 직접 확인하는 로컬 전용 HTTP 서버: python server.py."""
 
 import json
 import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from geometry import distance, length
+from geometry import distance, length, segment_distance
 
 
 class TestHandler(BaseHTTPRequestHandler):
@@ -25,7 +25,7 @@ class TestHandler(BaseHTTPRequestHandler):
         self.respond(200, page, "text/html; charset=utf-8")
 
     def do_POST(self):
-        if self.path != "/api/length":
+        if self.path not in ("/api/length", "/api/segment-distance"):
             self.respond(404, b'{"error":"Not found"}')
             return
         try:
@@ -34,8 +34,11 @@ class TestHandler(BaseHTTPRequestHandler):
                 raise ValueError("입력은 1~65,536바이트 이내여야 합니다.")
             payload = json.loads(self.rfile.read(size).decode("utf-8"))
             if not isinstance(payload, dict):
-                raise ValueError("points를 포함한 JSON 객체를 보내주세요.")
-            points = payload.get("points")
+                raise ValueError("좌표를 포함한 JSON 객체를 보내주세요.")
+            if self.path == "/api/length":
+                points = payload.get("points")
+            else:
+                points = [payload.get("point"), payload.get("start"), payload.get("end")]
             if not isinstance(points, list) or len(points) > 1000:
                 raise ValueError("좌표 목록은 최대 1,000개의 점을 담은 배열이어야 합니다.")
             for point in points:
@@ -44,11 +47,17 @@ class TestHandler(BaseHTTPRequestHandler):
                 for value in point:
                     if type(value) not in (int, float) or not math.isfinite(value):
                         raise ValueError("좌표에는 유한한 숫자만 입력해주세요.")
-            total = length(points)
-            if not math.isfinite(total):
-                raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
-            segments = [distance(points[i - 1], points[i]) for i in range(1, len(points))]
-            result = {"length": total, "segments": segments, "point_count": len(points)}
+            if self.path == "/api/length":
+                total = length(points)
+                if not math.isfinite(total):
+                    raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
+                segments = [distance(points[i - 1], points[i]) for i in range(1, len(points))]
+                result = {"length": total, "segments": segments, "point_count": len(points)}
+            else:
+                gap = segment_distance(points[0], points[1], points[2])
+                if not math.isfinite(gap):
+                    raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
+                result = {"distance": gap}
             self.respond(200, json.dumps(result, allow_nan=False).encode("utf-8"))
         except (ValueError, TypeError, OverflowError) as error:
             body = json.dumps({"error": str(error)}, ensure_ascii=False).encode("utf-8")

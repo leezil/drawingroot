@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>drawingroot · 선 길이 테스트</title>
+  <title>drawingroot · 기하 함수 테스트</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; background: #f4f7f5; color: #20382f; font-family: system-ui, sans-serif; }
@@ -13,21 +13,24 @@
     p { line-height: 1.7; color: #536a60; }
     form, .result { background: white; border: 1px solid #d8e2dc; padding: 24px; border-radius: 14px; margin: 24px 0; }
     label { display: block; margin-bottom: 12px; font-weight: 600; }
-    textarea { width: 100%; min-height: 140px; padding: 14px; border: 1px solid #aebeb4; border-radius: 8px; font: 16px/1.6 monospace; resize: vertical; }
-    textarea:focus-visible, button:focus-visible { outline: 3px solid #8bcfbd; outline-offset: 3px; }
+    textarea, input { width: 100%; padding: 14px; border: 1px solid #aebeb4; border-radius: 8px; font: 16px/1.6 monospace; }
+    textarea { min-height: 140px; resize: vertical; }
+    input { margin-bottom: 16px; }
+    textarea:focus-visible, input:focus-visible, button:focus-visible { outline: 3px solid #8bcfbd; outline-offset: 3px; }
     button { border: 0; border-radius: 8px; padding: 12px 20px; background: #177361; color: white; cursor: pointer; font-size: 15px; }
     button:disabled { opacity: .6; cursor: wait; }
     .hint { font-size: 13px; }
-    #total { display: block; font-size: 36px; font-weight: 650; margin: 12px 0; overflow-wrap: anywhere; }
+    output { display: block; font-size: 36px; font-weight: 650; margin: 12px 0; overflow-wrap: anywhere; }
     #segments { overflow-wrap: anywhere; }
-    #error { color: #b03825; }
+    [role="alert"] { color: #b03825; }
     [hidden] { display: none; }
   </style>
 </head>
 <body>
   <main>
     <span class="label">DRAWINGROOT / MAIN PROJECT</span>
-    <h1>선 전체 길이 테스트</h1>
+    <h1>기하 함수 테스트</h1>
+    <h2>선 전체 길이 테스트 · length</h2>
     <p>점들을 순서대로 연결하고, 각 구간의 거리를 더합니다.<br>실제 Python의 <code>length(points)</code> 함수를 호출합니다.</p>
     <form id="length-form">
       <label for="points">좌표 목록 · [[x, y], [x, y], …]</label>
@@ -41,6 +44,23 @@
       <output id="total"></output>
       <p id="segments"></p>
       <p id="count" class="hint"></p>
+    </section>
+    <h2>점과 선분 사이 거리 · segment_distance</h2>
+    <p>점에서 유한한 선분까지의 최단거리입니다. 수직으로 내린 위치가 선분 밖이면 가까운 끝점을 사용합니다.</p>
+    <form id="segment-form">
+      <label for="segment-point">거리 측정할 점 · point</label>
+      <input id="segment-point" type="text" value="[3, 4]" spellcheck="false" required>
+      <label for="segment-start">선분 시작점 · start</label>
+      <input id="segment-start" type="text" value="[0, 0]" spellcheck="false" required>
+      <label for="segment-end">선분 끝점 · end</label>
+      <input id="segment-end" type="text" value="[6, 0]" spellcheck="false" required>
+      <p class="hint">기본 예제의 가장 가까운 위치는 [3, 0]이고, 거리는 4입니다. 각 칸에 [x, y]를 입력하세요.</p>
+      <button id="segment-calculate" type="submit">점과 선분 거리 계산</button>
+      <p id="segment-error" role="alert" hidden></p>
+    </form>
+    <section class="result" id="segment-result" aria-live="polite" hidden>
+      <span>점과 선분 사이 거리</span>
+      <output id="segment-total"></output>
     </section>
     <p class="hint">결과 단위는 입력 좌표와 같습니다. 픽셀이면 픽셀입니다.<br>지도·도로 경로 계산은 아직 없으며, 위도·경도의 미터 거리 계산용이 아닙니다.</p>
   </main>
@@ -72,6 +92,42 @@
           ? '구간별 거리: ' + data.segments.join(' + ') + ' = ' + data.length
           : '연결할 구간이 없어 길이는 0입니다.';
         document.getElementById('count').textContent = '점 ' + data.point_count + '개 · 구간 ' + data.segments.length + '개';
+        result.hidden = false;
+      } catch (failure) {
+        error.textContent = failure.message;
+        error.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById('segment-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('segment-calculate');
+      const error = document.getElementById('segment-error');
+      const result = document.getElementById('segment-result');
+      error.hidden = true;
+      result.hidden = true;
+      button.disabled = true;
+      try {
+        let coordinates;
+        try {
+          coordinates = {
+            point: JSON.parse(document.getElementById('segment-point').value),
+            start: JSON.parse(document.getElementById('segment-start').value),
+            end: JSON.parse(document.getElementById('segment-end').value),
+          };
+        } catch {
+          throw new Error('각 좌표를 JSON 배열로 입력해주세요. 예: [3, 4]');
+        }
+        const response = await fetch('/api/segment-distance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(coordinates),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '계산하지 못했습니다.');
+        document.getElementById('segment-total').textContent = String(data.distance);
         result.hidden = false;
       } catch (failure) {
         error.textContent = failure.message;

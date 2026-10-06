@@ -62,6 +62,39 @@ class LocalServerTests(unittest.TestCase):
                 status, _ = self.request("GET", path)
                 self.assertEqual(status, 404)
 
+    def test_returns_point_to_segment_distance(self):
+        payload = {"point": [3, 4], "start": [0, 0], "end": [6, 0]}
+        status, body = self.request("POST", "/api/segment-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"distance": 4.0})
+
+    def test_segment_endpoint_and_degenerate_cases(self):
+        cases = (
+            ({"point": [9, 0], "start": [0, 0], "end": [6, 0]}, 3.0),
+            ({"point": [3, 4], "start": [0, 0], "end": [0, 0]}, 5.0),
+        )
+        for payload, expected in cases:
+            with self.subTest(payload=payload):
+                status, body = self.request("POST", "/api/segment-distance", json.dumps(payload))
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(body)["distance"], expected)
+
+    def test_rejects_missing_or_invalid_segment_coordinates(self):
+        for point in (None, [1], [True, 4], [float("nan"), 4], ["3", 4]):
+            with self.subTest(point=point):
+                payload = {"point": point, "start": [0, 0], "end": [6, 0]}
+                status, body = self.request("POST", "/api/segment-distance", json.dumps(payload))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+        status, _ = self.request("POST", "/api/segment-distance", '{"point": [3,4]}')
+        self.assertEqual(status, 400)
+
+    def test_unrepresentable_segment_returns_error(self):
+        payload = {"point": [0, 0], "start": [-1e308, 0], "end": [1e308, 0]}
+        status, body = self.request("POST", "/api/segment-distance", json.dumps(payload))
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
 
 if __name__ == "__main__":
     unittest.main()
