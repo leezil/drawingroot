@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>drawingroot · 선 길이 테스트</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f7f5; color: #20382f; font-family: system-ui, sans-serif; }
+    main { max-width: 680px; margin: 56px auto; padding: 0 20px; }
+    .label { color: #177361; letter-spacing: .12em; font-size: 12px; }
+    h1 { font-size: 28px; margin: 12px 0; }
+    p { line-height: 1.7; color: #536a60; }
+    form, .result { background: white; border: 1px solid #d8e2dc; padding: 24px; border-radius: 14px; margin: 24px 0; }
+    label { display: block; margin-bottom: 12px; font-weight: 600; }
+    textarea { width: 100%; min-height: 140px; padding: 14px; border: 1px solid #aebeb4; border-radius: 8px; font: 16px/1.6 monospace; resize: vertical; }
+    textarea:focus-visible, button:focus-visible { outline: 3px solid #8bcfbd; outline-offset: 3px; }
+    button { border: 0; border-radius: 8px; padding: 12px 20px; background: #177361; color: white; cursor: pointer; font-size: 15px; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .hint { font-size: 13px; }
+    #total { display: block; font-size: 36px; font-weight: 650; margin: 12px 0; overflow-wrap: anywhere; }
+    #segments { overflow-wrap: anywhere; }
+    #error { color: #b03825; }
+    [hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="label">DRAWINGROOT / MAIN PROJECT</span>
+    <h1>선 전체 길이 테스트</h1>
+    <p>점들을 순서대로 연결하고, 각 구간의 거리를 더합니다.<br>실제 Python의 <code>length(points)</code> 함수를 호출합니다.</p>
+    <form id="length-form">
+      <label for="points">좌표 목록 · [[x, y], [x, y], …]</label>
+      <textarea id="points" spellcheck="false" aria-describedby="input-hint">[[0, 0], [3, 4], [6, 4]]</textarea>
+      <p class="hint" id="input-hint">기본 예제는 5 + 3 = 8입니다. 마지막 점과 첫 점을 자동으로 연결하지 않습니다.</p>
+      <button id="calculate" type="submit">길이 계산</button>
+      <p id="error" role="alert" hidden></p>
+    </form>
+    <section class="result" id="result" aria-live="polite" hidden>
+      <span>선 전체 길이</span>
+      <output id="total"></output>
+      <p id="segments"></p>
+      <p id="count" class="hint"></p>
+    </section>
+    <p class="hint">결과 단위는 입력 좌표와 같습니다. 픽셀이면 픽셀입니다.<br>지도·도로 경로 계산은 아직 없으며, 위도·경도의 미터 거리 계산용이 아닙니다.</p>
+  </main>
+  <script>
+    document.getElementById('length-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('calculate');
+      const error = document.getElementById('error');
+      const result = document.getElementById('result');
+      error.hidden = true;
+      result.hidden = true;
+      button.disabled = true;
+      try {
+        let points;
+        try {
+          points = JSON.parse(document.getElementById('points').value);
+        } catch {
+          throw new Error('좌표를 JSON 배열로 입력해주세요. 예: [[0, 0], [3, 4]]');
+        }
+        const response = await fetch('/api/length', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ points }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '계산하지 못했습니다.');
+        document.getElementById('total').textContent = String(data.length);
+        document.getElementById('segments').textContent = data.segments.length
+          ? '구간별 거리: ' + data.segments.join(' + ') + ' = ' + data.length
+          : '연결할 구간이 없어 길이는 0입니다.';
+        document.getElementById('count').textContent = '점 ' + data.point_count + '개 · 구간 ' + data.segments.length + '개';
+        result.hidden = false;
+      } catch (failure) {
+        error.textContent = failure.message;
+        error.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

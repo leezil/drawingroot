@@ -8,3 +8,11 @@ def distance(a, b):
     delta_x = b[0] - a[0]
     delta_y = b[1] - a[1]
     return math.hypot(delta_x, delta_y)
+
+
+def length(points):
+    """점을 입력 순서대로 이은 선의 길이를 반환한다. 자동으로 닫지 않는다."""
+    total = 0.0
+    for index in range(1, len(points)):
+        total += distance(points[index - 1], points[index])
+    return total

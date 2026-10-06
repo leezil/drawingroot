@@ -1,0 +1,67 @@
+import http.client
+import json
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+
+from server import TestHandler
+
+
+class LocalServerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), TestHandler)
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.thread.join()
+
+    def request(self, method, path, body=None):
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=5)
+        try:
+            connection.request(method, path, body, {"Content-Type": "application/json"})
+            response = connection.getresponse()
+            return response.status, response.read()
+        finally:
+            connection.close()
+
+    def test_serves_test_screen(self):
+        status, body = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn("선 전체 길이 테스트", body.decode("utf-8"))
+
+    def test_returns_python_length_and_segments(self):
+        status, body = self.request("POST", "/api/length", json.dumps({"points": [[0, 0], [3, 4], [6, 4]]}))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"length": 8.0, "segments": [5.0, 3.0], "point_count": 3})
+
+    def test_empty_points_return_zero(self):
+        status, body = self.request("POST", "/api/length", '{"points": []}')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["length"], 0.0)
+
+    def test_rejects_invalid_coordinate_types(self):
+        for points in ([[True, 0]], [["3", 4]], [[1]], None, [[float("inf"), 0]]):
+            with self.subTest(points=points):
+                status, body = self.request("POST", "/api/length", json.dumps({"points": points}))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+
+    def test_rejects_malformed_json(self):
+        status, body = self.request("POST", "/api/length", "not json")
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_does_not_serve_source_or_env_files(self):
+        for path in ("/geometry.py", "/.env", "/../README.md"):
+            with self.subTest(path=path):
+                status, _ = self.request("GET", path)
+                self.assertEqual(status, 404)
+
+
+if __name__ == "__main__":
+    unittest.main()
