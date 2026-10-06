@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from geometry import distance, length, mean_distance, polyline_distance, resample, segment_distance, symmetric_mean_distance
+from geometry import distance, frechet, length, mean_distance, polyline_distance, resample, segment_distance, symmetric_mean_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -316,6 +316,97 @@ class SymmetricMeanDistanceTests(unittest.TestCase):
 
     def test_retracing_same_line_is_not_detected_as_error(self):
         self.assertEqual(symmetric_mean_distance([(0, 0), (10, 0)], [(0, 0), (10, 0), (0, 0)]), 0.0)
+
+
+class FrechetTests(unittest.TestCase):
+    def test_identical_ordered_points_have_zero_distance(self):
+        line = [(0, 0), (3, 0), (3, 4)]
+        self.assertEqual(frechet(line, line), 0.0)
+
+    def test_parallel_lines_have_constant_offset(self):
+        self.assertEqual(frechet([(0, 2), (10, 2)], [(0, 0), (10, 0)]), 2.0)
+
+    def test_two_single_points_use_distance(self):
+        self.assertEqual(frechet([(0, 0)], [(3, 4)]), 5.0)
+
+    def test_one_point_to_line_uses_maximum_vertex_distance(self):
+        self.assertEqual(frechet([(0, 0)], [(0, 0), (3, 4), (0, 0)]), 5.0)
+        self.assertEqual(frechet([(0, 0), (3, 4), (0, 0)], [(0, 0)]), 5.0)
+
+    def test_reversed_direction_changes_result(self):
+        line = [(0, 0), (10, 0)]
+        self.assertEqual(frechet(line, list(reversed(line))), 10.0)
+
+    def test_retrace_differs_from_mean_distance(self):
+        a, b = [(0, 0), (10, 0)], [(0, 0), (10, 0), (0, 0)]
+        self.assertEqual(symmetric_mean_distance(a, b), 0.0)
+        self.assertEqual(frechet(a, b), 10.0)
+
+    def test_internal_order_matters_even_with_same_endpoints_and_coverage(self):
+        a = [(0, 0), (10, 0), (0, 0), (-10, 0), (0, 0)]
+        b = [(0, 0), (-10, 0), (0, 0), (10, 0), (0, 0)]
+        self.assertEqual(symmetric_mean_distance(a, b), 0.0)
+        self.assertEqual(frechet(a, b), 10.0)
+
+    def test_swapping_whole_inputs_preserves_result(self):
+        a, b = [(0, 0), (3, 4), (6, 0)], [(1, 0), (2, 2), (4, 3), (8, 0)]
+        self.assertEqual(frechet(a, b), frechet(b, a))
+
+    def test_same_line_with_different_vertex_density_is_discrete(self):
+        a, b = [(0, 0), (10, 0)], [(0, 0), (5, 0), (10, 0)]
+        self.assertEqual(frechet(a, b), 5.0)
+        self.assertEqual(frechet(resample(a, 3), resample(b, 3)), 0.0)
+
+    def test_repeated_points_can_wait_without_error(self):
+        self.assertEqual(frechet([(0, 0), (0, 0), (10, 0)], [(0, 0), (10, 0), (10, 0)]), 0.0)
+
+    def test_empty_input_is_rejected(self):
+        for a, b in (([], [(0, 0)]), ([(0, 0)], []), ([], [])):
+            with self.subTest(a=a, b=b), self.assertRaises(ValueError):
+                frechet(a, b)
+
+    def test_input_lists_are_not_modified(self):
+        a, b = [[0, 0], [10, 0]], [[0, 0], [10, 0], [0, 0]]
+        frechet(a, b)
+        self.assertEqual(a, [[0, 0], [10, 0]])
+        self.assertEqual(b, [[0, 0], [10, 0], [0, 0]])
+
+    def test_tiny_distances_are_not_treated_as_zero(self):
+        self.assertAlmostEqual(frechet([(0, 0)], [(3e-200, 4e-200)]) / 1e-200, 5.0)
+
+    def test_large_finite_distance_is_supported(self):
+        self.assertEqual(frechet([(0, 0)], [(1e308, 0)]), 1e308)
+
+    def test_unrepresentable_optimal_distance_is_rejected(self):
+        with self.assertRaises(ValueError):
+            frechet([(-1e308, 0)], [(1e308, 0)])
+
+    def test_overflowing_unused_pairs_do_not_reject_finite_optimum(self):
+        line = [(-1e308, 0), (1e308, 0)]
+        self.assertEqual(frechet(line, line), 0.0)
+
+    def test_nan_distance_is_rejected(self):
+        with self.assertRaises(ValueError):
+            frechet([(float("nan"), 0)], [(0, 0)])
+
+    def test_matches_exhaustive_monotone_pairings_for_small_inputs(self):
+        # 검증용으로 모든 대응을 열거해 행을 재사용하는 본체와 독립적으로 확인한다.
+        def enumerate_results(a, b, i=0, j=0, worst=0.0):
+            worst = max(worst, distance(a[i], b[j]))
+            if i == len(a) - 1 and j == len(b) - 1:
+                return [worst]
+            results = []
+            for step_i, step_j in ((1, 0), (0, 1), (1, 1)):
+                if i + step_i < len(a) and j + step_j < len(b):
+                    results.extend(enumerate_results(a, b, i + step_i, j + step_j, worst))
+            return results
+
+        lines = ([(0, 0)], [(0, 0), (1, 0)], [(1, 0), (0, 0)],
+                 [(0, 0), (1, 1), (2, 0)], [(0, 0), (2, 0), (1, 1)])
+        for a in lines:
+            for b in lines:
+                with self.subTest(a=a, b=b):
+                    self.assertEqual(frechet(a, b), min(enumerate_results(a, b)))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from geometry import distance, length, mean_distance, polyline_distance, resample, segment_distance, symmetric_mean_distance
+from geometry import distance, frechet, length, mean_distance, polyline_distance, resample, segment_distance, symmetric_mean_distance
 
 
 class TestHandler(BaseHTTPRequestHandler):
@@ -25,7 +25,7 @@ class TestHandler(BaseHTTPRequestHandler):
         self.respond(200, page, "text/html; charset=utf-8")
 
     def do_POST(self):
-        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance", "/api/resample", "/api/mean-distance", "/api/symmetric-mean-distance"):
+        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance", "/api/resample", "/api/mean-distance", "/api/symmetric-mean-distance", "/api/frechet"):
             self.respond(404, b'{"error":"Not found"}')
             return
         try:
@@ -37,7 +37,7 @@ class TestHandler(BaseHTTPRequestHandler):
                 raise ValueError("좌표를 포함한 JSON 객체를 보내주세요.")
             if self.path in ("/api/length", "/api/polyline-distance", "/api/resample"):
                 points = payload.get("points")
-            elif self.path in ("/api/mean-distance", "/api/symmetric-mean-distance"):
+            elif self.path in ("/api/mean-distance", "/api/symmetric-mean-distance", "/api/frechet"):
                 points = payload.get("source")
             else:
                 points = [payload.get("point"), payload.get("start"), payload.get("end")]
@@ -46,7 +46,7 @@ class TestHandler(BaseHTTPRequestHandler):
             validation_points = points
             if self.path == "/api/polyline-distance":
                 validation_points = [payload.get("point")] + points
-            elif self.path in ("/api/mean-distance", "/api/symmetric-mean-distance"):
+            elif self.path in ("/api/mean-distance", "/api/symmetric-mean-distance", "/api/frechet"):
                 target = payload.get("target")
                 if not isinstance(target, list) or len(target) > 1000:
                     raise ValueError("비교할 선은 최대 1,000개의 점을 담은 배열이어야 합니다.")
@@ -63,6 +63,10 @@ class TestHandler(BaseHTTPRequestHandler):
                     raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
                 segments = [distance(points[i - 1], points[i]) for i in range(1, len(points))]
                 result = {"length": total, "segments": segments, "point_count": len(points)}
+            elif self.path == "/api/frechet":
+                gap = frechet(points, target)
+                result = {"frechet_distance": gap, "source_point_count": len(points),
+                          "target_point_count": len(target)}
             elif self.path in ("/api/mean-distance", "/api/symmetric-mean-distance"):
                 count = payload.get("count", 64)
                 if type(count) is not int or not 2 <= count <= 1000:

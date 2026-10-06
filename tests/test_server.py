@@ -307,5 +307,62 @@ class LocalServerTests(unittest.TestCase):
         self.assertIn('id="symmetric-form"', body.decode("utf-8"))
 
 
+    def test_frechet_returns_retrace_distance_and_original_point_counts(self):
+        payload = {"source": [[0, 0], [10, 0]], "target": [[0, 0], [10, 0], [0, 0]]}
+        status, body = self.request("POST", "/api/frechet", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"frechet_distance": 10.0,
+                                           "source_point_count": 2, "target_point_count": 3})
+
+    def test_frechet_does_not_automatically_resample(self):
+        payload = {"source": [[0, 0], [10, 0]], "target": [[0, 0], [5, 0], [10, 0]]}
+        status, body = self.request("POST", "/api/frechet", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["frechet_distance"], 5.0)
+
+    def test_frechet_rejects_invalid_or_missing_lines(self):
+        for key in ("source", "target"):
+            for value in (None, [], "bad", [[1]], [[True, 0]], [["1", 0]],
+                          [[float("nan"), 0]], [[float("inf"), 0]], [[0, 0]] * 1001):
+                with self.subTest(key=key, value=value):
+                    payload = {"source": [[0, 0]], "target": [[0, 0]], key: value}
+                    status, body = self.request("POST", "/api/frechet", json.dumps(payload))
+                    self.assertEqual(status, 400)
+                    self.assertIn("error", json.loads(body))
+            payload = {"source": [[0, 0]], "target": [[0, 0]]}
+            del payload[key]
+            status, _ = self.request("POST", "/api/frechet", json.dumps(payload))
+            self.assertEqual(status, 400)
+
+    def test_frechet_accepts_per_line_point_limit(self):
+        payload = {"source": [[0, 0]] * 1000, "target": [[3, 4]] * 1000}
+        status, body = self.request("POST", "/api/frechet", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"frechet_distance": 5.0,
+                                           "source_point_count": 1000, "target_point_count": 1000})
+
+    def test_frechet_rejects_unrepresentable_optimal_distance(self):
+        payload = {"source": [[-1e308, 0]], "target": [[1e308, 0]]}
+        status, body = self.request("POST", "/api/frechet", json.dumps(payload))
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_frechet_unused_overflowing_pair_allows_finite_result(self):
+        line = [[-1e308, 0], [1e308, 0]]
+        status, body = self.request("POST", "/api/frechet", json.dumps({"source": line, "target": line}))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["frechet_distance"], 0.0)
+
+    def test_frechet_rejects_malformed_json(self):
+        status, body = self.request("POST", "/api/frechet", "not json")
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_frechet_screen_is_available(self):
+        status, body = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn('id="frechet-form"', body.decode("utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

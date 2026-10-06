@@ -109,3 +109,32 @@ def symmetric_mean_distance(a, b, count=64):
     forward = mean_distance(a, b, count)
     backward = mean_distance(b, a, count)
     return forward / 2 + backward / 2
+
+
+def frechet(a, b):
+    """두 점 목록의 진행 순서를 유지하는 이산 프레셰 거리. 자동 재배치는 하지 않는다."""
+    if len(a) == 0 or len(b) == 0:
+        raise ValueError("비교할 두 선에 좌표가 하나 이상 필요합니다.")
+
+    previous = []
+    for i, point_a in enumerate(a):
+        row = []
+        for j, point_b in enumerate(b):
+            gap = distance(point_a, point_b)
+            if math.isnan(gap):
+                raise ValueError("거리 계산에 유효한 좌표가 필요합니다.")
+            if i == 0 and j == 0:
+                row.append(gap)
+            elif i == 0:
+                row.append(max(gap, row[j - 1]))
+            elif j == 0:
+                row.append(max(gap, previous[j]))
+            else:
+                best_previous = min(previous[j], previous[j - 1], row[j - 1])
+                row.append(max(gap, best_previous))
+        previous = row
+
+    result = previous[-1]
+    if not math.isfinite(result):
+        raise ValueError("거리 계산이 가능한 범위를 넘었습니다.")
+    return result

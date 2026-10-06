@@ -134,6 +134,24 @@
       <p id="symmetric-summary"></p>
       <p class="hint">각 방향에 같은 비중을 줍니다. 유사도 %가 아니며 샘플 기반 근사값입니다. 이동 순서·왕복·최대 이탈은 따로 평가해야 합니다.</p>
     </section>
+    <h2>진행 순서를 고려한 거리 · frechet</h2>
+    <p>입력 점들을 순서대로 따라가는 대응 중, 가장 크게 벌어지는 점 사이 거리를 최소화합니다. 이산 프레셰 거리이며 평균 거리는 아닙니다.</p>
+    <form id="frechet-form">
+      <label for="frechet-a">순서대로 비교할 첫 번째 선 · a</label>
+      <textarea id="frechet-a" spellcheck="false">[[0, 0], [10, 0]]</textarea>
+      <label for="frechet-b">순서대로 비교할 두 번째 선 · b</label>
+      <textarea id="frechet-b" spellcheck="false">[[0, 0], [10, 0], [0, 0]]</textarea>
+      <p class="hint">기본 예제는 같은 직선을 한 번 이동한 선과 왕복한 선입니다. 양방향 평균 거리는 0이지만 프레셰 거리는 10입니다.</p>
+      <p class="hint">입력 점 목록을 그대로 비교합니다. 자동 resample·시작점 변경·방향 뒤집기는 하지 않습니다. 같은 직선도 점 간격이 다르면 결과가 0이 아닐 수 있습니다.</p>
+      <button id="frechet-calculate" type="submit">프레셰 거리 계산</button>
+      <p id="frechet-error" role="alert" hidden></p>
+    </form>
+    <section class="result" id="frechet-result" aria-live="polite" hidden>
+      <span>이산 프레셰 거리 · 순서를 유지한 대응의 최소 최대 거리</span>
+      <output id="frechet-total"></output>
+      <p id="frechet-summary"></p>
+      <p class="hint">유사도 %가 아닌 거리입니다. 선 사이 입력 순서 교환과, 한 선의 진행 방향을 뒤집는 것은 다릅니다. 닫힌 선의 시작점과 왕복 허용 정책은 별도로 처리해야 합니다.</p>
+    </section>
     <p class="hint">결과 단위는 입력 좌표와 같습니다. 픽셀이면 픽셀입니다.<br>지도·도로 경로 계산은 아직 없으며, 위도·경도의 미터 거리 계산용이 아닙니다.</p>
   </main>
   <script>
@@ -339,6 +357,40 @@
         document.getElementById('symmetric-total').textContent = String(data.symmetric_mean_distance);
         document.getElementById('symmetric-summary').textContent = '각 방향에서 샘플 점 '
           + data.sample_count + '개를 측정 · 결과 단위는 입력 좌표와 같음';
+        result.hidden = false;
+      } catch (failure) {
+        error.textContent = failure.message;
+        error.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+    document.getElementById('frechet-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('frechet-calculate');
+      const error = document.getElementById('frechet-error');
+      const result = document.getElementById('frechet-result');
+      error.hidden = true;
+      result.hidden = true;
+      button.disabled = true;
+      try {
+        let source, target;
+        try {
+          source = JSON.parse(document.getElementById('frechet-a').value);
+          target = JSON.parse(document.getElementById('frechet-b').value);
+        } catch {
+          throw new Error('두 선을 JSON 배열로 입력해주세요. 예: [[0, 0], [10, 0]]');
+        }
+        const response = await fetch('/api/frechet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, target }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '프레셰 거리를 계산하지 못했습니다.');
+        document.getElementById('frechet-total').textContent = String(data.frechet_distance);
+        document.getElementById('frechet-summary').textContent = 'a의 점 ' + data.source_point_count
+          + '개 × b의 점 ' + data.target_point_count + '개 비교 · 자동 재배치 없음';
         result.hidden = false;
       } catch (failure) {
         error.textContent = failure.message;
