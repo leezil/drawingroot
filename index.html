@@ -22,6 +22,7 @@
     .hint { font-size: 13px; }
     output { display: block; font-size: 36px; font-weight: 650; margin: 12px 0; overflow-wrap: anywhere; }
     #segments { overflow-wrap: anywhere; }
+    pre { max-height: 320px; overflow: auto; background: #f4f7f5; padding: 16px; border-radius: 8px; font: 14px/1.7 monospace; }
     [role="alert"] { color: #b03825; }
     [hidden] { display: none; }
   </style>
@@ -77,6 +78,23 @@
       <span>점과 선 전체 사이 최단거리</span>
       <output id="polyline-total"></output>
       <p class="hint">대각선 계산에서는 소수점 오차로 0 대신 아주 작은 값이 나올 수 있습니다.</p>
+    </section>
+    <h2>선의 점을 일정한 간격으로 재배치 · resample</h2>
+    <p>원본 선을 따라 같은 거리 간격으로 새 점을 배치합니다. 시작점·끝점은 유지하고 원본 좌표는 수정하지 않습니다.</p>
+    <form id="resample-form">
+      <label for="resample-points">원본 선의 좌표 목록 · points</label>
+      <textarea id="resample-points" spellcheck="false" aria-describedby="resample-hint">[[0, 0], [1, 0], [9, 0], [10, 0]]</textarea>
+      <label for="resample-count">새 점 개수 · count (시작점·끝점 포함)</label>
+      <input id="resample-count" type="number" value="6" min="2" max="1000" step="1" required>
+      <p class="hint" id="resample-hint">기본 예제는 길이 10을 5구간으로 나눠 [0,0], [2,0], …, [10,0]을 반환합니다.</p>
+      <button id="resample-calculate" type="submit">점 재배치</button>
+      <p id="resample-error" role="alert" hidden></p>
+    </form>
+    <section class="result" id="resample-result" aria-live="polite" hidden>
+      <span>재배치한 좌표 목록</span>
+      <pre id="resample-coordinates"></pre>
+      <p id="resample-summary"></p>
+      <p class="hint">간격은 원본 선을 따라 측정합니다. 꺾이는 구간에서는 새 점 사이 직선거리와 다를 수 있으며, 점이 적으면 꼭짓점이 생략될 수 있습니다.</p>
     </section>
     <p class="hint">결과 단위는 입력 좌표와 같습니다. 픽셀이면 픽셀입니다.<br>지도·도로 경로 계산은 아직 없으며, 위도·경도의 미터 거리 계산용이 아닙니다.</p>
   </main>
@@ -178,6 +196,41 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || '계산하지 못했습니다.');
         document.getElementById('polyline-total').textContent = String(data.distance);
+        result.hidden = false;
+      } catch (failure) {
+        error.textContent = failure.message;
+        error.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
+    document.getElementById('resample-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('resample-calculate');
+      const error = document.getElementById('resample-error');
+      const result = document.getElementById('resample-result');
+      error.hidden = true;
+      result.hidden = true;
+      button.disabled = true;
+      try {
+        let points;
+        try {
+          points = JSON.parse(document.getElementById('resample-points').value);
+        } catch {
+          throw new Error('원본 선을 JSON 배열로 입력해주세요. 예: [[0, 0], [10, 0]]');
+        }
+        const count = Number(document.getElementById('resample-count').value);
+        const response = await fetch('/api/resample', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ points, count }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '재배치하지 못했습니다.');
+        document.getElementById('resample-coordinates').textContent = '[\n  '
+          + data.points.map(point => JSON.stringify(point)).join(',\n  ') + '\n]';
+        document.getElementById('resample-summary').textContent = '새 점 ' + data.point_count
+          + '개 · 원본 선을 따라 배치한 목표 간격 ' + data.spacing;
         result.hidden = false;
       } catch (failure) {
         error.textContent = failure.message;

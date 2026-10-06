@@ -55,3 +55,38 @@ def polyline_distance(point, points):
         gap = segment_distance(point, points[index - 1], points[index])
         closest_distance = min(closest_distance, gap)
     return closest_distance
+
+
+def resample(points, count):
+    """원본 선을 따라 같은 간격으로 count개의 새 점을 배치한다. 양 끝점을 포함한다."""
+    if type(count) is not int or count < 2:
+        raise ValueError("새 점 개수는 2 이상의 정수여야 합니다.")
+    if len(points) == 0:
+        raise ValueError("재배치할 선의 좌표가 하나 이상 필요합니다.")
+
+    total = length(points)
+    if not math.isfinite(total):
+        raise ValueError("선의 길이가 계산 가능한 범위를 넘었습니다.")
+    if total == 0.0:
+        return [tuple(points[0]) for _ in range(count)]
+
+    sampled = [tuple(points[0])]
+    segment_index = 1
+    walked = 0.0
+    segment_length = distance(points[0], points[1])
+    for sample_index in range(1, count - 1):
+        target = total * (sample_index / (count - 1))
+        while segment_index < len(points) - 1 and (
+            segment_length == 0.0 or walked + segment_length < target
+        ):
+            walked += segment_length
+            segment_index += 1
+            segment_length = distance(points[segment_index - 1], points[segment_index])
+
+        start, end = points[segment_index - 1], points[segment_index]
+        ratio = 0.0 if segment_length == 0.0 else (target - walked) / segment_length
+        ratio = max(0.0, min(1.0, ratio))
+        sampled.append((start[0] + (end[0] - start[0]) * ratio,
+                        start[1] + (end[1] - start[1]) * ratio))
+    sampled.append(tuple(points[-1]))
+    return sampled

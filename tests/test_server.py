@@ -139,5 +139,49 @@ class LocalServerTests(unittest.TestCase):
         self.assertEqual(status, 400)
 
 
+    def test_returns_resampled_points_and_spacing(self):
+        payload = {"points": [[0, 0], [1, 0], [9, 0], [10, 0]], "count": 6}
+        status, body = self.request("POST", "/api/resample", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"points": [[0, 0], [2, 0], [4, 0], [6, 0], [8, 0], [10, 0]],
+                                           "point_count": 6, "spacing": 2.0})
+
+    def test_resample_zero_length_line_returns_repeated_points(self):
+        payload = {"points": [[3, 4]], "count": 3}
+        status, body = self.request("POST", "/api/resample", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"points": [[3, 4]] * 3, "point_count": 3, "spacing": 0.0})
+
+    def test_resample_empty_line_returns_error(self):
+        status, body = self.request("POST", "/api/resample", '{"points": [], "count": 6}')
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_rejects_invalid_or_missing_resample_count(self):
+        for count in (None, 0, 1, -1, True, 6.0, "6", 1001):
+            with self.subTest(count=count):
+                payload = {"points": [[0, 0], [10, 0]], "count": count}
+                status, body = self.request("POST", "/api/resample", json.dumps(payload))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+
+    def test_resample_api_allows_maximum_count(self):
+        payload = {"points": [[0, 0], [10, 0]], "count": 1000}
+        status, body = self.request("POST", "/api/resample", json.dumps(payload))
+        self.assertEqual(status, 200)
+        sampled = json.loads(body)["points"]
+        self.assertEqual(len(sampled), 1000)
+        self.assertEqual(sampled[0], [0, 0])
+        self.assertEqual(sampled[-1], [10, 0])
+
+    def test_rejects_invalid_resample_coordinates(self):
+        for points in (None, "bad", [[0]], [[True, 0]], [[float("nan"), 0]], [[0, 0]] * 1001):
+            with self.subTest(points=points):
+                payload = {"points": points, "count": 6}
+                status, body = self.request("POST", "/api/resample", json.dumps(payload))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+
+
 if __name__ == "__main__":
     unittest.main()

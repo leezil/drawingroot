@@ -5,7 +5,7 @@ import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from geometry import distance, length, polyline_distance, segment_distance
+from geometry import distance, length, polyline_distance, resample, segment_distance
 
 
 class TestHandler(BaseHTTPRequestHandler):
@@ -25,7 +25,7 @@ class TestHandler(BaseHTTPRequestHandler):
         self.respond(200, page, "text/html; charset=utf-8")
 
     def do_POST(self):
-        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance"):
+        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance", "/api/resample"):
             self.respond(404, b'{"error":"Not found"}')
             return
         try:
@@ -35,7 +35,7 @@ class TestHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(size).decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("좌표를 포함한 JSON 객체를 보내주세요.")
-            if self.path in ("/api/length", "/api/polyline-distance"):
+            if self.path in ("/api/length", "/api/polyline-distance", "/api/resample"):
                 points = payload.get("points")
             else:
                 points = [payload.get("point"), payload.get("start"), payload.get("end")]
@@ -56,6 +56,13 @@ class TestHandler(BaseHTTPRequestHandler):
                     raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
                 segments = [distance(points[i - 1], points[i]) for i in range(1, len(points))]
                 result = {"length": total, "segments": segments, "point_count": len(points)}
+            elif self.path == "/api/resample":
+                count = payload.get("count")
+                if type(count) is not int or not 2 <= count <= 1000:
+                    raise ValueError("새 점 개수는 2~1,000 사이의 정수여야 합니다.")
+                sampled = resample(points, count)
+                result = {"points": sampled, "point_count": len(sampled),
+                          "spacing": length(points) / (count - 1)}
             else:
                 if self.path == "/api/segment-distance":
                     gap = segment_distance(points[0], points[1], points[2])

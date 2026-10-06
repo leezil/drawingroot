@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from geometry import distance, length, polyline_distance, segment_distance
+from geometry import distance, length, polyline_distance, resample, segment_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -132,6 +132,71 @@ class PolylineDistanceTests(unittest.TestCase):
         original = points.copy()
         polyline_distance((4, 4), points)
         self.assertEqual(points, original)
+
+
+class ResampleTests(unittest.TestCase):
+    def test_uneven_straight_line_becomes_evenly_spaced(self):
+        self.assertEqual(resample([(0, 0), (1, 0), (9, 0), (10, 0)], 6),
+                         [(0, 0), (2, 0), (4, 0), (6, 0), (8, 0), (10, 0)])
+
+    def test_two_samples_preserve_only_endpoints(self):
+        self.assertEqual(resample([(0, 0), (3, 0), (3, 4)], 2), [(0, 0), (3, 4)])
+
+    def test_interpolation_follows_corner_instead_of_endpoint_chord(self):
+        self.assertEqual(resample([(0, 0), (3, 0), (3, 4)], 3),
+                         [(0, 0), (3, 0.5), (3, 4)])
+
+    def test_integer_arc_length_positions_along_corner(self):
+        expected = [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1), (3, 2), (3, 3), (3, 4)]
+        self.assertEqual(resample([(0, 0), (3, 0), (3, 4)], 8), expected)
+
+    def test_repeated_vertices_are_skipped_without_division_by_zero(self):
+        points = [(0, 0), (0, 0), (3, 0), (3, 0), (6, 0), (6, 0)]
+        self.assertEqual(resample(points, 7), [(i, 0) for i in range(7)])
+
+    def test_one_point_is_repeated(self):
+        self.assertEqual(resample([(3, 4)], 4), [(3, 4)] * 4)
+
+    def test_zero_length_line_is_repeated(self):
+        self.assertEqual(resample([(3, 4), (3, 4)], 4), [(3, 4)] * 4)
+
+    def test_empty_line_is_rejected(self):
+        with self.assertRaises(ValueError):
+            resample([], 6)
+
+    def test_invalid_counts_are_rejected(self):
+        for count in (0, 1, -1, True, 6.0, "6", None):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                resample([(0, 0), (10, 0)], count)
+
+    def test_input_and_mutable_endpoints_are_not_reused(self):
+        points = [[0, 0], [3, 0], [3, 4]]
+        original = [point.copy() for point in points]
+        sampled = resample(points, 4)
+        self.assertEqual(points, original)
+        self.assertIsNot(sampled[0], points[0])
+        self.assertIsNot(sampled[-1], points[-1])
+
+    def test_closed_input_preserves_repeated_endpoint_and_count(self):
+        sampled = resample([(0, 0), (3, 0), (3, 4), (0, 0)], 9)
+        self.assertEqual(len(sampled), 9)
+        self.assertEqual(sampled[0], (0, 0))
+        self.assertEqual(sampled[-1], (0, 0))
+
+    def test_samples_remain_on_original_polyline(self):
+        points = [(-3, -2), (1, 4), (7, -1), (2, -6)]
+        sampled = resample(points, 37)
+        self.assertEqual(len(sampled), 37)
+        for point in sampled:
+            self.assertAlmostEqual(polyline_distance(point, points), 0.0)
+
+    def test_tiny_lengths_are_not_treated_as_zero(self):
+        sampled = resample([(0, 0), (1e-200, 0)], 3)
+        self.assertAlmostEqual(sampled[1][0] / 1e-200, 0.5)
+
+    def test_unrepresentable_length_is_rejected(self):
+        with self.assertRaises(ValueError):
+            resample([(-1e308, 0), (1e308, 0)], 3)
 
 
 if __name__ == "__main__":
