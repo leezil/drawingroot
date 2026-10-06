@@ -102,3 +102,10 @@ def mean_distance(source, target, count=64):
         raise ValueError("거리 계산이 가능한 범위를 넘었습니다.")
     # 합계가 넘치지 않도록 각각 나눈 뒤 정밀하게 더한다.
     return math.fsum(gap / len(samples) for gap in gaps)
+
+
+def symmetric_mean_distance(a, b, count=64):
+    """두 방향의 평균 거리를 같은 비중으로 합친다. 이동 순서는 평가하지 않는다."""
+    forward = mean_distance(a, b, count)
+    backward = mean_distance(b, a, count)
+    return forward / 2 + backward / 2

@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from geometry import distance, length, mean_distance, polyline_distance, resample, segment_distance
+from geometry import distance, length, mean_distance, polyline_distance, resample, segment_distance, symmetric_mean_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -258,6 +258,64 @@ class MeanDistanceTests(unittest.TestCase):
     def test_unrepresentable_gap_is_rejected(self):
         with self.assertRaises(ValueError):
             mean_distance([(-1e308, 0)], [(1e308, 0)])
+
+
+class SymmetricMeanDistanceTests(unittest.TestCase):
+    def test_same_line_has_near_zero_distance(self):
+        line = [(0, 0), (3, 0), (3, 4)]
+        self.assertAlmostEqual(symmetric_mean_distance(line, line), 0.0)
+
+    def test_partial_overlap_is_not_zero(self):
+        self.assertAlmostEqual(symmetric_mean_distance([(0, 0), (2, 0)], [(0, 0), (10, 0)], 6), 10 / 6)
+
+    def test_swapping_inputs_preserves_result(self):
+        a, b = [(0, 0), (3, 4), (6, 0)], [(1, 0), (4, 2), (8, 0)]
+        self.assertEqual(symmetric_mean_distance(a, b, 17), symmetric_mean_distance(b, a, 17))
+
+    def test_equals_average_of_two_directed_measurements(self):
+        a, b = [(0, 0), (10, 0)], [(0, 1), (2, 3), (5, 4)]
+        expected = (mean_distance(a, b, 9) + mean_distance(b, a, 9)) / 2
+        self.assertAlmostEqual(symmetric_mean_distance(a, b, 9), expected)
+
+    def test_parallel_lines_have_constant_offset(self):
+        self.assertEqual(symmetric_mean_distance([(0, 2), (10, 2)], [(0, 0), (10, 0)]), 2.0)
+
+    def test_point_inputs_are_supported(self):
+        self.assertEqual(symmetric_mean_distance([(0, 0)], [(3, 4)]), 5.0)
+        self.assertEqual(symmetric_mean_distance([(0, 0)], [(0, 0), (10, 0)], 3), 2.5)
+
+    def test_repeated_vertices_do_not_change_same_shape(self):
+        self.assertEqual(symmetric_mean_distance([(0, 0), (0, 0), (10, 0)], [(0, 0), (10, 0)]), 0.0)
+
+    def test_empty_input_is_rejected_on_either_side(self):
+        for a, b in (([], [(0, 0)]), ([(0, 0)], []), ([], [])):
+            with self.subTest(a=a, b=b), self.assertRaises(ValueError):
+                symmetric_mean_distance(a, b)
+
+    def test_invalid_sample_counts_are_rejected(self):
+        for count in (None, True, 1, -1, 3.0, "3"):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                symmetric_mean_distance([(0, 0)], [(0, 0)], count)
+
+    def test_input_lists_are_not_modified(self):
+        a, b = [[0, 0], [2, 0]], [[0, 0], [10, 0]]
+        symmetric_mean_distance(a, b, 6)
+        self.assertEqual(a, [[0, 0], [2, 0]])
+        self.assertEqual(b, [[0, 0], [10, 0]])
+
+    def test_large_finite_average_does_not_overflow(self):
+        self.assertEqual(symmetric_mean_distance([(0, 0)], [(1e308, 0)]), 1e308)
+
+    def test_unrepresentable_distance_is_rejected(self):
+        with self.assertRaises(ValueError):
+            symmetric_mean_distance([(-1e308, 0)], [(1e308, 0)])
+
+    def test_reversed_traversal_is_not_detected_as_error(self):
+        line = [(0, 0), (3, 0), (3, 4)]
+        self.assertAlmostEqual(symmetric_mean_distance(line, list(reversed(line))), 0.0)
+
+    def test_retracing_same_line_is_not_detected_as_error(self):
+        self.assertEqual(symmetric_mean_distance([(0, 0), (10, 0)], [(0, 0), (10, 0), (0, 0)]), 0.0)
 
 
 if __name__ == "__main__":
