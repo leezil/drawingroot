@@ -90,3 +90,15 @@ def resample(points, count):
                         start[1] + (end[1] - start[1]) * ratio))
     sampled.append(tuple(points[-1]))
     return sampled
+
+
+def mean_distance(source, target, count=64):
+    """source의 균등 샘플에서 target 원본 선까지 거리의 평균. 단방향 측정이다."""
+    if len(target) == 0:
+        raise ValueError("비교할 선의 좌표가 하나 이상 필요합니다.")
+    samples = resample(source, count)
+    gaps = [polyline_distance(point, target) for point in samples]
+    if not all(math.isfinite(gap) for gap in gaps):
+        raise ValueError("거리 계산이 가능한 범위를 넘었습니다.")
+    # 합계가 넘치지 않도록 각각 나눈 뒤 정밀하게 더한다.
+    return math.fsum(gap / len(samples) for gap in gaps)

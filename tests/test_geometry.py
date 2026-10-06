@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from geometry import distance, length, polyline_distance, resample, segment_distance
+from geometry import distance, length, mean_distance, polyline_distance, resample, segment_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -197,6 +197,67 @@ class ResampleTests(unittest.TestCase):
     def test_unrepresentable_length_is_rejected(self):
         with self.assertRaises(ValueError):
             resample([(-1e308, 0), (1e308, 0)], 3)
+
+
+class MeanDistanceTests(unittest.TestCase):
+    def test_same_polyline_has_near_zero_distance(self):
+        points = [(0, 0), (3, 0), (3, 4)]
+        self.assertAlmostEqual(mean_distance(points, points), 0.0)
+
+    def test_parallel_lines_have_constant_offset(self):
+        self.assertEqual(mean_distance([(0, 2), (10, 2)], [(0, 0), (10, 0)]), 2.0)
+
+    def test_uneven_input_vertices_do_not_change_sampling(self):
+        target = [(0, 0)]
+        self.assertEqual(mean_distance([(0, 0), (10, 0)], target, 6),
+                         mean_distance([(0, 0), (1, 0), (9, 0), (10, 0)], target, 6))
+
+    def test_point_source_to_line(self):
+        self.assertEqual(mean_distance([(3, 4)], [(0, 0), (6, 0)]), 4.0)
+
+    def test_point_source_to_point(self):
+        self.assertEqual(mean_distance([(3, 4)], [(0, 0)]), 5.0)
+
+    def test_point_target_averages_sample_distances(self):
+        self.assertEqual(mean_distance([(0, 0), (10, 0)], [(0, 0)], 3), 5.0)
+
+    def test_target_corner_is_not_removed_by_resampling(self):
+        self.assertEqual(mean_distance([(3, 0)], [(0, 0), (3, 0), (3, 4)], 2), 0.0)
+
+    def test_measurement_is_directed_not_symmetric(self):
+        short = [(0, 0), (2, 0)]
+        long = [(0, 0), (10, 0)]
+        self.assertEqual(mean_distance(short, long, 6), 0.0)
+        self.assertAlmostEqual(mean_distance(long, short, 6), 20 / 6)
+
+    def test_sampling_count_can_change_approximation(self):
+        source = [(0, 0), (10, 0)]
+        target = [(0, 0), (0, 10), (10, 10), (10, 0)]
+        self.assertEqual(mean_distance(source, target, 2), 0.0)
+        self.assertAlmostEqual(mean_distance(source, target, 3), 5 / 3)
+
+    def test_empty_source_or_target_is_rejected(self):
+        for source, target in (([], [(0, 0)]), ([(0, 0)], [])):
+            with self.subTest(source=source, target=target), self.assertRaises(ValueError):
+                mean_distance(source, target)
+
+    def test_invalid_counts_are_rejected(self):
+        for count in (None, True, 1, -1, 3.0, "3"):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                mean_distance([(0, 0)], [(0, 0)], count)
+
+    def test_inputs_are_not_modified(self):
+        source, target = [[0, 2], [10, 2]], [[0, 0], [10, 0]]
+        mean_distance(source, target)
+        self.assertEqual(source, [[0, 2], [10, 2]])
+        self.assertEqual(target, [[0, 0], [10, 0]])
+
+    def test_large_finite_average_does_not_overflow_sum(self):
+        self.assertEqual(mean_distance([(1e308, 0)], [(0, 0)]), 1e308)
+
+    def test_unrepresentable_gap_is_rejected(self):
+        with self.assertRaises(ValueError):
+            mean_distance([(-1e308, 0)], [(1e308, 0)])
 
 
 if __name__ == "__main__":

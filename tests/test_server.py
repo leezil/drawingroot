@@ -183,5 +183,64 @@ class LocalServerTests(unittest.TestCase):
                 self.assertIn("error", json.loads(body))
 
 
+    def test_mean_distance_defaults_to_64_samples(self):
+        payload = {"source": [[0, 2], [10, 2]], "target": [[0, 0], [10, 0]]}
+        status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"mean_distance": 2.0, "sample_count": 64})
+
+    def test_mean_distance_custom_count_and_direction(self):
+        payload = {"source": [[0, 0], [10, 0]], "target": [[0, 0], [2, 0]], "count": 6}
+        status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertAlmostEqual(json.loads(body)["mean_distance"], 20 / 6)
+        self.assertEqual(json.loads(body)["sample_count"], 6)
+
+    def test_mean_distance_rejects_invalid_lines(self):
+        for key in ("source", "target"):
+            for value in (None, [], "bad", [[1]], [[True, 0]], [[float("inf"), 0]], [[0, 0]] * 1001):
+                with self.subTest(key=key, value=value):
+                    payload = {"source": [[0, 0]], "target": [[0, 0]], key: value}
+                    status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+                    self.assertEqual(status, 400)
+                    self.assertIn("error", json.loads(body))
+            payload = {"source": [[0, 0]], "target": [[0, 0]]}
+            del payload[key]
+            status, _ = self.request("POST", "/api/mean-distance", json.dumps(payload))
+            self.assertEqual(status, 400)
+
+    def test_mean_distance_rejects_invalid_counts(self):
+        for count in (None, True, 0, 1, -1, 3.0, "3", 1001):
+            with self.subTest(count=count):
+                payload = {"source": [[0, 0]], "target": [[0, 0]], "count": count}
+                status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+
+    def test_mean_distance_limits_apply_to_each_line_separately(self):
+        payload = {"source": [[3, 4]] * 1000, "target": [[0, 0]] * 1000, "count": 2}
+        status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["mean_distance"], 5.0)
+
+    def test_mean_distance_accepts_maximum_sample_count(self):
+        payload = {"source": [[3, 4]], "target": [[0, 0]], "count": 1000}
+        status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertAlmostEqual(json.loads(body)["mean_distance"], 5.0)
+        self.assertEqual(json.loads(body)["sample_count"], 1000)
+
+    def test_mean_distance_rejects_unrepresentable_gap(self):
+        payload = {"source": [[-1e308, 0]], "target": [[1e308, 0]]}
+        status, body = self.request("POST", "/api/mean-distance", json.dumps(payload))
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_mean_distance_screen_is_available(self):
+        status, body = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn('id="mean-form"', body.decode("utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

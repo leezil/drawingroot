@@ -5,7 +5,7 @@ import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from geometry import distance, length, polyline_distance, resample, segment_distance
+from geometry import distance, length, mean_distance, polyline_distance, resample, segment_distance
 
 
 class TestHandler(BaseHTTPRequestHandler):
@@ -25,7 +25,7 @@ class TestHandler(BaseHTTPRequestHandler):
         self.respond(200, page, "text/html; charset=utf-8")
 
     def do_POST(self):
-        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance", "/api/resample"):
+        if self.path not in ("/api/length", "/api/segment-distance", "/api/polyline-distance", "/api/resample", "/api/mean-distance"):
             self.respond(404, b'{"error":"Not found"}')
             return
         try:
@@ -37,6 +37,8 @@ class TestHandler(BaseHTTPRequestHandler):
                 raise ValueError("좌표를 포함한 JSON 객체를 보내주세요.")
             if self.path in ("/api/length", "/api/polyline-distance", "/api/resample"):
                 points = payload.get("points")
+            elif self.path == "/api/mean-distance":
+                points = payload.get("source")
             else:
                 points = [payload.get("point"), payload.get("start"), payload.get("end")]
             if not isinstance(points, list) or len(points) > 1000:
@@ -44,6 +46,11 @@ class TestHandler(BaseHTTPRequestHandler):
             validation_points = points
             if self.path == "/api/polyline-distance":
                 validation_points = [payload.get("point")] + points
+            elif self.path == "/api/mean-distance":
+                target = payload.get("target")
+                if not isinstance(target, list) or len(target) > 1000:
+                    raise ValueError("비교할 선은 최대 1,000개의 점을 담은 배열이어야 합니다.")
+                validation_points = points + target
             for point in validation_points:
                 if not isinstance(point, list) or len(point) != 2:
                     raise ValueError("각 점은 [x, y] 형태여야 합니다.")
@@ -56,6 +63,12 @@ class TestHandler(BaseHTTPRequestHandler):
                     raise ValueError("계산 가능한 범위를 넘었습니다. 좌표 크기를 줄여주세요.")
                 segments = [distance(points[i - 1], points[i]) for i in range(1, len(points))]
                 result = {"length": total, "segments": segments, "point_count": len(points)}
+            elif self.path == "/api/mean-distance":
+                count = payload.get("count", 64)
+                if type(count) is not int or not 2 <= count <= 1000:
+                    raise ValueError("샘플 점 개수는 2~1,000 사이의 정수여야 합니다.")
+                gap = mean_distance(points, target, count)
+                result = {"mean_distance": gap, "sample_count": count}
             elif self.path == "/api/resample":
                 count = payload.get("count")
                 if type(count) is not int or not 2 <= count <= 1000:
