@@ -364,5 +364,80 @@ class LocalServerTests(unittest.TestCase):
         self.assertIn('id="frechet-form"', body.decode("utf-8"))
 
 
+    def test_resampled_frechet_returns_gap_and_actual_sampled_points(self):
+        payload = {"source": [[0, 0], [10, 0]], "target": [[0, 0], [5, 0], [10, 0]], "count": 3}
+        status, body = self.request("POST", "/api/resampled-frechet", json.dumps(payload))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {
+            "frechet_distance": 0.0, "sample_count": 3,
+            "sampled_source": [[0, 0], [5, 0], [10, 0]],
+            "sampled_target": [[0, 0], [5, 0], [10, 0]],
+        })
+
+    def test_resampled_frechet_default_sample_count(self):
+        payload = {"source": [[0, 0]], "target": [[3, 4]]}
+        status, body = self.request("POST", "/api/resampled-frechet", json.dumps(payload))
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["frechet_distance"], 5.0)
+        self.assertEqual(data["sample_count"], 64)
+        self.assertEqual(data["sampled_source"], [[0, 0]] * 64)
+        self.assertEqual(data["sampled_target"], [[3, 4]] * 64)
+
+    def test_resampled_frechet_retrace_and_low_sample_limit(self):
+        a = [[0, 0], [10, 0]]
+        for b, count, expected in (([[0, 0], [10, 0], [0, 0]], 3, 10.0),
+                                   ([[0, 0], [5, 5], [10, 0]], 2, 0.0),
+                                   ([[0, 0], [5, 5], [10, 0]], 3, 5.0)):
+            with self.subTest(b=b, count=count):
+                status, body = self.request("POST", "/api/resampled-frechet",
+                                            json.dumps({"source": a, "target": b, "count": count}))
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(body)["frechet_distance"], expected)
+
+    def test_resampled_frechet_rejects_invalid_counts(self):
+        for count in (None, True, 0, 1, -1, 3.0, "3", 1001):
+            with self.subTest(count=count):
+                payload = {"source": [[0, 0]], "target": [[0, 0]], "count": count}
+                status, body = self.request("POST", "/api/resampled-frechet", json.dumps(payload))
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(body))
+
+    def test_resampled_frechet_rejects_invalid_or_missing_lines(self):
+        for key in ("source", "target"):
+            for value in (None, [], "bad", [[1]], [[True, 0]], [[float("inf"), 0]], [[0, 0]] * 1001):
+                with self.subTest(key=key, value=value):
+                    payload = {"source": [[0, 0]], "target": [[0, 0]], key: value}
+                    status, body = self.request("POST", "/api/resampled-frechet", json.dumps(payload))
+                    self.assertEqual(status, 400)
+                    self.assertIn("error", json.loads(body))
+            payload = {"source": [[0, 0]], "target": [[0, 0]]}
+            del payload[key]
+            status, _ = self.request("POST", "/api/resampled-frechet", json.dumps(payload))
+            self.assertEqual(status, 400)
+
+    def test_resampled_frechet_accepts_maximum_point_and_sample_counts(self):
+        payload = {"source": [[0, 0]] * 1000, "target": [[3, 4]] * 1000, "count": 1000}
+        status, body = self.request("POST", "/api/resampled-frechet", json.dumps(payload))
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["frechet_distance"], 5.0)
+        self.assertEqual(len(data["sampled_source"]), 1000)
+        self.assertEqual(len(data["sampled_target"]), 1000)
+
+    def test_resampled_frechet_rejects_overflow_and_malformed_json(self):
+        payload = {"source": [[-1e308, 0], [1e308, 0]], "target": [[0, 0]]}
+        for body in (json.dumps(payload), "not json"):
+            with self.subTest(body=body):
+                status, response = self.request("POST", "/api/resampled-frechet", body)
+                self.assertEqual(status, 400)
+                self.assertIn("error", json.loads(response))
+
+    def test_resampled_frechet_screen_is_available(self):
+        status, body = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn('id="resampled-frechet-form"', body.decode("utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

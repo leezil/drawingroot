@@ -31,6 +31,29 @@
   <main>
     <span class="label">DRAWINGROOT / MAIN PROJECT</span>
     <h1>기하 함수 테스트</h1>
+    <h2 id="resampled-frechet">균등 재배치 후 순서 비교 · resampled_frechet</h2>
+    <p>같은 직선도 입력 점의 개수가 다르면 기존 프레셰 값이 달라질 수 있습니다.<br>두 선을 각각 같은 개수의 균등 샘플로 바꾼 뒤 비교해 점 배치 차이의 영향을 줄입니다.</p>
+    <form id="resampled-frechet-form">
+      <label for="resampled-frechet-a">첫 번째 선 · a</label>
+      <textarea id="resampled-frechet-a" spellcheck="false">[[0, 0], [10, 0]]</textarea>
+      <label for="resampled-frechet-b">두 번째 선 · b</label>
+      <textarea id="resampled-frechet-b" spellcheck="false">[[0, 0], [5, 0], [10, 0]]</textarea>
+      <label for="resampled-frechet-count">각 선의 샘플 점 개수 · count</label>
+      <input id="resampled-frechet-count" type="number" value="3" min="2" max="1000" step="1" required>
+      <p class="hint">기본 예제의 원본 프레셰 거리는 5입니다. 각각 3점으로 재배치하면 두 목록이 같아져 결과는 0입니다.</p>
+      <button id="resampled-frechet-calculate" type="submit">재배치 후 프레셰 거리 계산</button>
+      <p id="resampled-frechet-error" role="alert" hidden></p>
+    </form>
+    <section class="result" id="resampled-frechet-result" aria-live="polite" hidden>
+      <span>재배치한 두 점 목록의 이산 프레셰 거리</span>
+      <output id="resampled-frechet-total"></output>
+      <p id="resampled-frechet-summary"></p>
+      <h3>실제로 비교한 첫 번째 선의 점</h3>
+      <pre id="resampled-frechet-source"></pre>
+      <h3>실제로 비교한 두 번째 선의 점</h3>
+      <pre id="resampled-frechet-target"></pre>
+      <p class="hint">위치·크기·회전·시작점·방향은 자동으로 맞추지 않습니다. 유사도 %가 아닌 거리이며, 샘플이 적으면 굴곡을 놓칠 수 있습니다. 0이 전체 선의 완전한 일치를 보장하지는 않습니다.</p>
+    </section>
     <h2>선 전체 길이 테스트 · length</h2>
     <p>점들을 순서대로 연결하고, 각 구간의 거리를 더합니다.<br>실제 Python의 <code>length(points)</code> 함수를 호출합니다.</p>
     <form id="length-form">
@@ -155,6 +178,45 @@
     <p class="hint">결과 단위는 입력 좌표와 같습니다. 픽셀이면 픽셀입니다.<br>지도·도로 경로 계산은 아직 없으며, 위도·경도의 미터 거리 계산용이 아닙니다.</p>
   </main>
   <script>
+    document.getElementById('resampled-frechet-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = document.getElementById('resampled-frechet-calculate');
+      const error = document.getElementById('resampled-frechet-error');
+      const result = document.getElementById('resampled-frechet-result');
+      error.hidden = true;
+      result.hidden = true;
+      button.disabled = true;
+      try {
+        let source, target;
+        try {
+          source = JSON.parse(document.getElementById('resampled-frechet-a').value);
+          target = JSON.parse(document.getElementById('resampled-frechet-b').value);
+        } catch {
+          throw new Error('두 선을 JSON 배열로 입력해주세요. 예: [[0, 0], [10, 0]]');
+        }
+        const count = Number(document.getElementById('resampled-frechet-count').value);
+        const response = await fetch('/api/resampled-frechet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, target, count }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '재배치 후 비교하지 못했습니다.');
+        document.getElementById('resampled-frechet-total').textContent = String(data.frechet_distance);
+        document.getElementById('resampled-frechet-summary').textContent = '각 선을 '
+          + data.sample_count + '개 점으로 재배치한 뒤 비교 · 결과 단위는 입력 좌표와 같음';
+        document.getElementById('resampled-frechet-source').textContent = '[\n  '
+          + data.sampled_source.map(point => JSON.stringify(point)).join(',\n  ') + '\n]';
+        document.getElementById('resampled-frechet-target').textContent = '[\n  '
+          + data.sampled_target.map(point => JSON.stringify(point)).join(',\n  ') + '\n]';
+        result.hidden = false;
+      } catch (failure) {
+        error.textContent = failure.message;
+        error.hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    });
     document.getElementById('length-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const button = document.getElementById('calculate');

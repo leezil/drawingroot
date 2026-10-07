@@ -138,3 +138,10 @@ def frechet(a, b):
     if not math.isfinite(result):
         raise ValueError("거리 계산이 가능한 범위를 넘었습니다.")
     return result
+
+
+def resampled_frechet(a, b, count=64):
+    """두 선을 각각 균등 샘플로 준비한 뒤 이산 프레셰 거리를 계산한다."""
+    sampled_a = resample(a, count)
+    sampled_b = resample(b, count)
+    return frechet(sampled_a, sampled_b)

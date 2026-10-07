@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from geometry import distance, frechet, length, mean_distance, polyline_distance, resample, segment_distance, symmetric_mean_distance
+from geometry import distance, frechet, length, mean_distance, polyline_distance, resample, resampled_frechet, segment_distance, symmetric_mean_distance
 
 
 class DistanceTests(unittest.TestCase):
@@ -407,6 +407,70 @@ class FrechetTests(unittest.TestCase):
             for b in lines:
                 with self.subTest(a=a, b=b):
                     self.assertEqual(frechet(a, b), min(enumerate_results(a, b)))
+
+
+class ResampledFrechetTests(unittest.TestCase):
+    def test_same_straight_line_with_different_point_counts(self):
+        a, b = [(0, 0), (10, 0)], [(0, 0), (5, 0), (10, 0)]
+        self.assertEqual(frechet(a, b), 5.0)
+        self.assertEqual(resampled_frechet(a, b, 3), 0.0)
+
+    def test_nonuniform_and_repeated_points_do_not_change_same_line(self):
+        a = [(0, 0), (10, 0)]
+        b = [(0, 0), (0, 0), (1, 0), (9, 0), (10, 0)]
+        self.assertEqual(resampled_frechet(a, b, 6), 0.0)
+
+    def test_same_bent_line_with_additional_vertices(self):
+        a = [(0, 0), (3, 0), (3, 4)]
+        b = [(0, 0), (1, 0), (3, 0), (3, 2), (3, 4)]
+        self.assertAlmostEqual(resampled_frechet(a, b, 8), 0.0)
+
+    def test_parallel_lines_keep_their_offset(self):
+        self.assertEqual(resampled_frechet([(0, 2), (10, 2)], [(0, 0), (10, 0)], 6), 2.0)
+
+    def test_direction_and_retrace_are_still_evaluated(self):
+        a = [(0, 0), (10, 0)]
+        self.assertEqual(resampled_frechet(a, list(reversed(a)), 3), 10.0)
+        self.assertEqual(resampled_frechet(a, [(0, 0), (10, 0), (0, 0)], 3), 10.0)
+
+    def test_single_points_repeat_and_use_their_distance(self):
+        self.assertEqual(resampled_frechet([(0, 0)], [(3, 4)], 3), 5.0)
+
+    def test_default_and_custom_counts_use_existing_functions(self):
+        a, b = [(0, 0), (3, 0), (3, 4)], [(0, 0), (3, 4)]
+        self.assertEqual(resampled_frechet(a, b), frechet(resample(a, 64), resample(b, 64)))
+        for count in (2, 3, 7, 100):
+            with self.subTest(count=count):
+                self.assertEqual(resampled_frechet(a, b, count),
+                                 frechet(resample(a, count), resample(b, count)))
+
+    def test_too_few_samples_can_miss_an_internal_difference(self):
+        # 양 끝점만 남기면 중간 굴곡은 평가되지 않는다. 0도 전체 일치 보장은 아니다.
+        a, b = [(0, 0), (10, 0)], [(0, 0), (5, 5), (10, 0)]
+        self.assertEqual(resampled_frechet(a, b, 2), 0.0)
+        self.assertEqual(resampled_frechet(a, b, 3), 5.0)
+
+    def test_swapping_inputs_preserves_result(self):
+        a, b = [(0, 0), (3, 0), (3, 4)], [(1, 0), (3, 3)]
+        self.assertEqual(resampled_frechet(a, b, 5), resampled_frechet(b, a, 5))
+
+    def test_invalid_counts_and_empty_lines_are_rejected(self):
+        for count in (None, True, 1, 0, -1, 3.0, "3"):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                resampled_frechet([(0, 0)], [(0, 0)], count)
+        for a, b in (([], [(0, 0)]), ([(0, 0)], []), ([], [])):
+            with self.subTest(a=a, b=b), self.assertRaises(ValueError):
+                resampled_frechet(a, b)
+
+    def test_input_lists_are_not_modified(self):
+        a, b = [[0, 0], [10, 0]], [[0, 0], [5, 0], [10, 0]]
+        resampled_frechet(a, b, 3)
+        self.assertEqual(a, [[0, 0], [10, 0]])
+        self.assertEqual(b, [[0, 0], [5, 0], [10, 0]])
+
+    def test_unrepresentable_line_length_is_rejected(self):
+        with self.assertRaises(ValueError):
+            resampled_frechet([(-1e308, 0), (1e308, 0)], [(0, 0)])
 
 
 if __name__ == "__main__":
