@@ -11,7 +11,6 @@
 
 처음에는 Python 표준 라이브러리만 사용합니다. Python 3.10 이상이면 별도 패키지 설치 없이 시작할 수 있습니다.
 
-현재 첫 기능: [두 점 거리 함수 설명](docs/001_DISTANCE.md). `geometry.py`의 `distance(a, b)`를 구현했습니다.
 
 ```powershell
 python -m unittest discover -s tests -v
